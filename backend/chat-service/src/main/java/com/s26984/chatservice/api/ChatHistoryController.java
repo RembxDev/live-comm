@@ -8,7 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
+
 
 @RestController
 @RequiredArgsConstructor
@@ -17,9 +17,9 @@ public class ChatHistoryController {
 
     private final ChatService chatService;
 
-    @GetMapping("/messages/{sessionId}")
-    public List<ChatMessageResponse> getHistory(@PathVariable UUID sessionId) {
-        return chatService.history(sessionId);
+    @GetMapping("/{roomId}/recent")
+    public List<ChatMessageResponse> getHistory(@PathVariable String roomId) {
+        return chatService.history(roomId);
     }
 
     @PostMapping("/messages")

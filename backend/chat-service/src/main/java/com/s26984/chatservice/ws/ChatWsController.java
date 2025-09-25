@@ -11,7 +11,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
-import java.util.UUID;
+import java.security.Principal;
+
 
 @Controller
 @RequiredArgsConstructor
@@ -22,14 +23,20 @@ public class ChatWsController {
     private final SimpMessagingTemplate messaging;
 
 
-    @MessageMapping("/chat/{sessionId}")
-    public void receive(@DestinationVariable String sessionId,
-                        @Valid CreateChatMessageRequest dto) {
+    @MessageMapping("/rooms/{roomId}/message")
+    public void sendToRoom(@DestinationVariable String roomId,
+                           @Valid CreateChatMessageRequest dto,
+                           Principal principal) {
 
-        UUID sid = UUID.fromString(sessionId);
-        ChatMessageResponse saved = chatService.saveIncoming(sid, dto);
+        if (dto.roomId() == null || !dto.roomId().equals(roomId)) {
+            dto = new CreateChatMessageRequest(dto.sessionId(), dto.sender(), dto.type(), dto.content(), roomId);
+        }
 
-        messaging.convertAndSend("/topic/chat/" + sid, saved);
-        log.debug("Saved and broadcast message {} for session {}", saved.id(), sid);
+        ChatMessageResponse saved = chatService.create(dto);
+
+        messaging.convertAndSend("/topic/rooms." + saved.roomId() + ".messages", saved);
+
+        log.debug("WS message -> room={} by={}", saved.roomId(),
+                principal != null ? principal.getName() : "anon");
     }
 }

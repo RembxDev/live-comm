@@ -10,6 +10,6 @@ import java.util.UUID;
 @FeignClient(name = "session-service", url = "${session.service.base-url}")
 public interface SessionClient {
 
-    @GetMapping("/api/guest-sessions/{sessionId}/exists")
+    @GetMapping("/api/guest-session/{sessionId}/exists")
     boolean sessionExists(@PathVariable("sessionId") UUID sessionId);
 }

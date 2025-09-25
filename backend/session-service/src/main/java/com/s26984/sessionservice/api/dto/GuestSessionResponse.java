@@ -11,5 +11,7 @@ public record GuestSessionResponse(
         String email,
         boolean verified,
         Instant createdAt,
-        String verificationToken
+        String verificationToken,
+        Integer captchaA,
+        Integer captchaB
 ) {}

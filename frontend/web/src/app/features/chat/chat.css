@@ -1,0 +1,70 @@
+@reference "tailwindcss";
+
+.page { @apply max-w-4xl mx-auto p-4 space-y-6 text-slate-100; }
+
+/* ===== header / cards ===== */
+.header { @apply rounded-2xl border border-slate-800 px-5 py-4 flex items-center justify-between bg-slate-900 shadow-2xl; }
+.header { background: linear-gradient(180deg, rgba(99,102,241,.22), rgba(2,6,23,.85)); }
+
+.card   { @apply rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-xl; }
+
+/* ===== badges & inputs ===== */
+.status { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 border text-xs; }
+.dot    { @apply inline-block size-2.5 rounded-full; }
+
+.btn    { @apply inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm shadow-sm hover:bg-slate-800 active:scale-95 transition; }
+.btn-primary { @apply bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500; }
+.input  { @apply rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm shadow-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+
+/* ===== message list ===== */
+.messages { @apply h-[54vh] overflow-auto p-3 rounded-2xl bg-slate-950/70 border border-slate-800; }
+.messages-inner { @apply space-y-3; }
+
+.row   { @apply flex items-end gap-2 max-w-[88%]; }
+.row.me { @apply ml-auto flex-row-reverse; }
+.row.other { @apply mr-auto; }
+
+.avatar { @apply shrink-0 size-9 rounded-full grid place-items-center text-[11px] font-semibold shadow; }
+.avatar.me { @apply bg-indigo-600 text-white; }
+.avatar.other { @apply bg-slate-700 text-slate-200; }
+
+.meta { @apply text-[10px] text-slate-400 mb-1 flex items-center gap-2; }
+.nick { @apply font-medium text-slate-200; }
+.when { @apply text-slate-500; }
+
+.bubble { @apply relative rounded-2xl px-3 py-2 text-sm leading-5 shadow-sm; animation: bubbleIn .18s ease-out both; }
+.row.me .bubble { @apply bg-indigo-600 text-white; }
+.row.other .bubble { @apply bg-slate-800 text-slate-100; }
+
+.tail:after { content:""; position:absolute; bottom:.35rem; width:0; height:0; border:8px solid transparent; }
+.row.me .tail:after    { right:-4px;  border-left-color: rgb(79 70 229); border-right:0; border-top:0; }
+.row.other .tail:after { left:-4px;   border-right-color: rgb(30 41 59); border-left:0;  border-top:0; }
+
+/* typing indicator */
+.typing { @apply flex items-end gap-2; }
+.typing .bubble { @apply bg-slate-800 text-slate-200; }
+.dots { @apply inline-flex gap-1; }
+.dots span { @apply inline-block size-1.5 rounded-full bg-slate-400; animation: dots 1.2s infinite ease-in-out; }
+.dots span:nth-child(2){ animation-delay:.12s; }
+.dots span:nth-child(3){ animation-delay:.24s; }
+
+/* composer */
+.composer { @apply rounded-2xl border border-slate-800 bg-slate-900 p-2; }
+.composer-grid { @apply grid grid-cols-[auto_1fr_auto] gap-2 items-center; }
+.mic-btn { @apply size-10 rounded-xl border border-slate-700 grid place-items-center hover:bg-slate-800 transition; }
+
+/* videos */
+.videos { @apply grid grid-cols-1 md:grid-cols-2 gap-3; }
+.video-wrap { @apply rounded-2xl border border-slate-800 p-2 bg-slate-950; }
+.video     { @apply w-full aspect-video rounded-xl bg-black shadow-inner; object-fit: cover; }
+.video.local  { @apply ring-2 ring-indigo-500; }
+.video.remote { @apply ring-2 ring-emerald-500; }
+
+/* animations */
+@keyframes dots { 0%,80%,100%{ transform:scale(1); opacity:.65 } 40%{ transform:scale(1.55); opacity:1 } }
+@keyframes bubbleIn { from { transform: translateY(4px) scale(.98); opacity:0 } to { transform: translateY(0) scale(1); opacity:1 } }
+
+/* scrollbar (webkit) */
+.messages::-webkit-scrollbar       { width: 10px; }
+.messages::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+.messages::-webkit-scrollbar-track { background: transparent; }

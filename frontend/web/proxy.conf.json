@@ -1,0 +1,24 @@
+[
+  {
+    "context": ["/api-session"],
+    "target": "http://localhost:8081",
+    "changeOrigin": true,
+    "secure": false,
+    "pathRewrite": { "^/api-session": "" }
+  },
+  {
+    "context": ["/api-chat"],
+    "target": "http://localhost:8082",
+    "changeOrigin": true,
+    "secure": false,
+    "pathRewrite": { "^/api-chat": "" }
+  },
+  {
+    "context": ["/ws-chat"],
+    "target": "http://localhost:8082",
+    "ws": true,
+    "changeOrigin": true,
+    "secure": false,
+    "pathRewrite": { "^/ws-chat": "/ws" }
+  }
+]

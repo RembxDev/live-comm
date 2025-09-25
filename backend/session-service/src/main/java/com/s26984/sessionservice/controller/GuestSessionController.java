@@ -29,13 +29,12 @@ public class GuestSessionController {
     }
 
     @GetMapping("/{id}")
-    public GuestSessionResponse get(@PathVariable UUID id) {
-        return service.get(id);
+    public GuestSessionResponse get(@PathVariable("id") UUID sessionId) {
+        return service.get(sessionId);
     }
 
-
     @GetMapping("/{id}/exists")
-    public boolean exists(@PathVariable UUID id) {
-        return service.exists(id);
+    public boolean exists(@PathVariable("id") UUID sessionId) {
+        return service.exists(sessionId);
     }
 }

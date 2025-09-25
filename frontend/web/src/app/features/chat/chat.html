@@ -1,0 +1,138 @@
+<div class="page">
+  <!-- HEADER -->
+  <header class="header">
+    <div>
+      <h1 class="text-xl font-semibold tracking-tight">LiveComm</h1>
+      <p class="text-xs text-slate-400">Realtime chat demo</p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <span
+        class="status"
+        [ngClass]="wsConnected ? 'border-green-400 text-green-300' : 'border-slate-600 text-slate-400'">
+        <span class="dot" [ngClass]="wsConnected ? 'bg-green-500' : 'bg-slate-500'"></span>
+        {{ wsConnected ? 'Online' : 'Offline' }}
+      </span>
+    </div>
+  </header>
+
+  <!-- SESJA / SETUP -->
+  <section class="card space-y-3">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+      <input class="input" [(ngModel)]="email"  placeholder="email" />
+      <button class="btn" (click)="createSession()">Create session</button>
+
+      <input class="input" [(ngModel)]="token"  placeholder="token z serwera" />
+      <div class="grid grid-cols-2 gap-2">
+        <input class="input" type="number" [(ngModel)]="captcha" placeholder="captcha wynik" />
+        <button class="btn" (click)="verify()">Verify</button>
+      </div>
+
+      <input class="input md:col-span-2" [(ngModel)]="roomId"  placeholder="roomId (np. general_1)" />
+      <input class="input" [(ngModel)]="sender" placeholder="nick" />
+      <button class="btn btn-primary" (click)="joinRoom()" [disabled]="joinDisabled">Join &amp; Load history</button>
+    </div>
+
+    <div class="text-xs text-slate-400 flex flex-wrap gap-x-4">
+      <div>sessionId: <code>{{sessionId}}</code></div>
+      <div>verified: <strong>{{verified}}</strong></div>
+      <div>ws: <strong>{{wsConnected}}</strong></div>
+    </div>
+
+    @if (captchaA !== null && captchaB !== null) {
+      <div class="text-xs text-slate-400">
+        Captcha: <strong>{{captchaA}} + {{captchaB}}</strong> = ?
+      </div>
+    }
+  </section>
+
+  <!-- CHAT -->
+  <section class="card space-y-3">
+    <div class="messages">
+      <div class="messages-inner" id="messagesTop"></div>
+
+      @for (m of messages; track m.messageId) {
+        <div class="row" [ngClass]="m.sender === sender ? 'me' : 'other'">
+          <div class="avatar" [ngClass]="m.sender === sender ? 'me' : 'other'">
+            {{ (m.sender || '?').slice(0,1).toUpperCase() }}
+          </div>
+
+          <div class="content">
+            <div class="meta">
+              <span class="nick">{{ m.sender }}</span>
+              <span class="when">{{ m.createdAt }}</span>
+            </div>
+            <div class="bubble tail">{{ m.content }}</div>
+          </div>
+        </div>
+      }
+
+      @if (typingPeers?.length) {
+        <div class="typing">
+          <div class="avatar other">…</div>
+          <div class="content">
+            <div class="meta">
+              <span class="nick">{{ typingPeers.join(', ') }}</span>
+              <span class="when">pisze…</span>
+            </div>
+            <div class="bubble">
+              <span class="dots"><span></span><span></span><span></span></span>
+            </div>
+          </div>
+        </div>
+      }
+
+      <div id="messagesEnd"></div>
+
+      @if (!messages.length && !(typingPeers?.length)) {
+        <div class="text-sm text-slate-500 text-center py-8">Brak wiadomości</div>
+      }
+    </div>
+
+    <!-- composer -->
+    <div class="composer">
+      <div class="composer-grid">
+        <!-- (opcjonalny) przycisk mikrofonu -->
+        <button class="mic-btn" title="Push-to-talk (demo)" (mousedown)="pttDown()" (mouseup)="pttUp()" (mouseleave)="pttUp()">
+          <svg viewBox="0 0 24 24" class="size-5 text-slate-300"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>
+        </button>
+
+        <input
+          class="input"
+          [(ngModel)]="input"
+          placeholder="Napisz wiadomość…"
+          (keydown)="onTypingKey()"
+          (keyup.enter)="send()" />
+
+        <button class="btn btn-primary" (click)="send()">Wyślij</button>
+      </div>
+
+      <div class="text-xs mt-2" [class.text-amber-400]="info" [class.text-slate-400]="!info">
+        {{ info || ' ' }}
+      </div>
+    </div>
+  </section>
+
+  <!-- WEBRTC (demo) -->
+  <section class="card space-y-3">
+    <div class="flex items-center justify-between gap-2">
+      <input class="input flex-1" [(ngModel)]="calleeSessionId" placeholder="sessionId rozmówcy (demo)" />
+      <div class="flex gap-2">
+        <button class="btn btn-primary" (click)="onStartCall()">Start call</button>
+        <button class="btn" (click)="onEndCall()">End</button>
+      </div>
+    </div>
+
+    <div class="videos">
+      <div class="video-wrap">
+        <div class="text-xs text-slate-400 mb-1">Remote</div>
+        <video id="remoteVideo" class="video remote" autoplay playsinline></video>
+        <audio id="remoteAudio"></audio>
+      </div>
+      <div class="video-wrap">
+        <div class="text-xs text-slate-400 mb-1">Local (muted)</div>
+        <video id="localVideo" class="video local" muted autoplay playsinline></video>
+      </div>
+    </div>
+  </section>
+</div>

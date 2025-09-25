@@ -1,7 +1,10 @@
-version: "3.9"
-
 services:
-  postgres:
+  # =========================
+  # INFRA
+  # =========================
+
+  chat-postgres:
+    profiles: ["infra"]
     image: postgres:16-alpine
     container_name: chat-postgres
     environment:
@@ -10,21 +13,101 @@ services:
       POSTGRES_DB: chatdb
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chat -d chatdb"]
       interval: 5s
       timeout: 3s
-      retries: 10
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      retries: 30
+    restart: unless-stopped
 
-  adminer:
+  chat-adminer:
+    profiles: ["infra"]
     image: adminer:4
     container_name: chat-adminer
     depends_on:
-      - postgres
+      chat-postgres:
+        condition: service_healthy
     ports:
       - "8085:8080"
+    restart: unless-stopped
+
+  rabbitmq:
+    profiles: ["infra"]
+    image: rabbitmq:3-management
+    container_name: chat-rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: chat
+      RABBITMQ_DEFAULT_PASS: chat
+    command: ["sh","-c","rabbitmq-plugins enable --offline rabbitmq_stomp && rabbitmq-server"]
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # =========================
+  # APLIKACJE (Spring Boot)
+  # =========================
+
+  session-service:
+    build: .
+    image: session-service:dev
+    container_name: session-service
+    profiles: ["app"]
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      chat-postgres:
+        condition: service_healthy
+    ports: ["8081:8081"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  chat-service:
+    build: .
+    image: chat-service:dev
+    container_name: chat-service
+    profiles: ["app"]
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      chat-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      session-service:
+        condition: service_healthy
+    ports: ["8082:8082"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
 
 volumes:
   pgdata:
+  rabbitmq_data:
+
+
+    # ALL : docker compose -p live-comm --profile infra --profile app up -d --build
+    # BACKEND ONLY: docker compose -p live-comm --profile app up -d --build
+    # INFRA ONLY: docker compose -p live-comm --profile infra up -d
+
+    # STOP + SAVE DATA: docker compose -p live-comm down --remove-orphans
+    # STOP + CLEAR: docker compose -p live-comm down -v --remove-orphans
+
+    # REBUILD: docker compose -p live-comm --profile app build
+    #          docker compose -p live-comm --profile app up -d

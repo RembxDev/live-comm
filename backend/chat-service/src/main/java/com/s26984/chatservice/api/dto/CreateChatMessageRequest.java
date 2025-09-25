@@ -8,5 +8,6 @@ public record CreateChatMessageRequest(
         UUID sessionId,
         String sender,
         ChatMessage.MessageType type,
-        String content
+        String content,
+        String roomId
 ) {}

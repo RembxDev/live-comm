@@ -6,10 +6,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record ChatMessageResponse(
-        UUID id,
+        UUID messageId,
         UUID sessionId,
         String sender,
         ChatMessage.MessageType type,
         String content,
+        String roomId,
         Instant createdAt
 ) {}

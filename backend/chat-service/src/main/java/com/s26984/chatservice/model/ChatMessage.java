@@ -15,9 +15,14 @@ import java.util.UUID;
 @Builder
 public class ChatMessage {
 
+    public enum MessageType { TEXT, FILE, SYSTEM, SIGNALING }
+
     @Id
-    @Column(nullable = false, updatable = false)
-    private UUID id;
+    @Column(name = "message_id", nullable = false, updatable = false)
+    private UUID messageId;
+
+    @Column(name = "room_id", nullable = false)
+    private String roomId;
 
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
@@ -29,11 +34,20 @@ public class ChatMessage {
     @Column(nullable = false)
     private MessageType type;
 
-    @Column(columnDefinition = "text")
+    @Column(columnDefinition = "text", nullable = false)
     private String content;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    public enum MessageType { TEXT, FILE, SYSTEM, SIGNALING }
+    @PrePersist
+    protected void onCreate() {
+        if (messageId == null) {
+            messageId = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+    }
+
 }

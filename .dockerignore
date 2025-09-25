@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.mvn/wrapper
+**/target
+target
+node_modules
+dist
+tmp
+*.log
+*.iml
+.DS_Store
