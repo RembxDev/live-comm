@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ChatMessageResponse, ChatWs, CreateChatMessageRequest, RtcSignal } from '../../core/chat-core';
 
-// ===== DTOs sesji =====
+// ===== DTOs =====
 type MessageType = 'TEXT' | 'FILE' | 'SYSTEM' | 'SIGNALING';
 
 interface CreateGuestSessionRequest { email: string; }
@@ -22,8 +22,13 @@ interface VerifyGuestSessionRequest {
   verificationToken: string;
   captchaResult: number;
 }
+interface VerificationResponse {
+  sessionId: string;
+  token: string;
+}
 
-// ===== WebRTC sygnalizacja (dopasuj do backendu) =====
+
+// ===== WebRTC sygnalizacja =====
 const RTC_OFFER_DEST     = (targetSid: string) => `/app/rtc/${targetSid}/offer`;
 const RTC_ANSWER_DEST    = (targetSid: string) => `/app/rtc/${targetSid}/answer`;
 const RTC_CANDIDATE_DEST = (targetSid: string) => `/app/rtc/${targetSid}/candidate`;
@@ -54,6 +59,7 @@ export class ChatComponent implements OnDestroy {
 
   sessionId: string | null = null;
   verified = false;
+  jwtToken: string | null = null;
 
   messages: ChatMessageResponse[] = [];
   wsConnected = false;
@@ -71,11 +77,8 @@ export class ChatComponent implements OnDestroy {
   private remoteStream: MediaStream | null = null;
   private pttStream: MediaStream | null = null;
 
-  // najlepiej pobrać z backendu; demo:
   private iceServers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302'] },
-    // { urls: ['turn:YOUR_IP:3478?transport=udp'], username: 'livecomm', credential: 'superSecretPass' },
-    // { urls: ['turn:YOUR_IP:3478?transport=tcp'], username: 'livecomm', credential: 'superSecretPass' },
   ];
 
   constructor(private http: HttpClient, private chatWs: ChatWs) {}
@@ -85,12 +88,10 @@ export class ChatComponent implements OnDestroy {
     this.tearDownRtc();
   }
 
-  // ======== computed ========
   get joinDisabled(): boolean {
-    return !this.verified || !this.roomId.trim() || !this.sender.trim();
+    return !this.jwtToken || !this.roomId.trim() || !this.sender.trim();
   }
 
-  // ======== SESJA ========
   createSession(): void {
     const email = this.email.trim();
     if (!email) { this.info = 'Podaj e-mail.'; return; }
@@ -119,24 +120,25 @@ export class ChatComponent implements OnDestroy {
       verificationToken: this.token.trim(),
       captchaResult: Number(this.captcha),
     };
-    this.http.post<GuestSessionResponse>(`${this.sessionApi}/api/guest-session/verify`, body).subscribe({
+
+    this.http.post<VerificationResponse>(`${this.sessionApi}/api/guest-session/verify`, body).subscribe({
       next: (res) => {
-        this.verified = res.verified;
+        this.jwtToken = res.token;
+        this.verified = true;
         this.token = ''; this.captcha = null; this.captchaA = null; this.captchaB = null;
-        this.info = 'Sesja zweryfikowana. Możesz dołączyć do pokoju.';
+        this.info = 'Sesja zweryfikowana. Otrzymano token JWT. Możesz dołączyć do pokoju.';
       },
       error: () => this.info = 'Błąd weryfikacji sesji.',
     });
   }
 
-  // ======== CZAT: join + history + WS ========
   async joinRoom(): Promise<void> {
+    if (this.joinDisabled || !this.jwtToken) return;
+
     const rid = this.roomId.trim();
-    if (this.joinDisabled || !this.sessionId) return;
 
     const afterConnect = async () => {
       try {
-        // presence + ping + suby
         this.chatWs.publish(`/app/rooms/${rid}/presence/join`, '');
         this.chatWs.ping();
 
@@ -154,7 +156,7 @@ export class ChatComponent implements OnDestroy {
     };
 
     if (!this.chatWs.connected) {
-      this.chatWs.ensureConnected(this.sessionId!, {
+      this.chatWs.ensureConnected(this.jwtToken, {
         onConnect: () => { this.wsConnected = true; afterConnect(); },
         onDisconnect: () => { this.wsConnected = false; },
         onError: () => { this.info = 'STOMP error – sprawdź logi backendu.'; },
@@ -176,7 +178,6 @@ export class ChatComponent implements OnDestroy {
     }
   }
 
-
   private subscribeTyping(roomId: string): void {
     try {
       this.chatWs.subscribeTyping(roomId, (ev: { roomId: string; sessionId: string; typing: boolean; ts: string }) => {
@@ -184,7 +185,6 @@ export class ChatComponent implements OnDestroy {
         const nick = ev.sessionId;
 
         if (ev.typing) {
-
           if (!this.typingPeers.includes(nick)) this.typingPeers = [...this.typingPeers, nick];
           clearTimeout(this.typingTimers.get(nick));
           const t = setTimeout(() => {
@@ -193,7 +193,6 @@ export class ChatComponent implements OnDestroy {
           }, 2500);
           this.typingTimers.set(nick, t);
         } else {
-
           this.typingPeers = this.typingPeers.filter(n => n !== nick);
           clearTimeout(this.typingTimers.get(nick));
           this.typingTimers.delete(nick);
@@ -202,14 +201,11 @@ export class ChatComponent implements OnDestroy {
     } catch {}
   }
 
-
   onTypingKey(): void {
     const rid = this.roomId.trim();
     if (!rid) return;
 
-
     this.chatWs.sendTyping(rid, true);
-
 
     clearTimeout(this.typingSelfDebounce);
     this.typingSelfDebounce = setTimeout(() => {
@@ -220,15 +216,13 @@ export class ChatComponent implements OnDestroy {
   disconnectWs(): void {
     this.chatWs.disconnect();
     this.wsConnected = false;
-    // wyczyść typujących
     this.typingPeers = [];
     this.typingTimers.forEach(t => clearTimeout(t));
     this.typingTimers.clear();
   }
 
-  // ======== SEND ========
   send(): void {
-    if (!this.sessionId || !this.verified) { this.info = 'Brak zweryfikowanej sesji.'; return; }
+    if (!this.sessionId || !this.jwtToken) { this.info = 'Brak zweryfikowanej sesji.'; return; }
     const rid = this.roomId.trim();
     const nick = this.sender.trim();
     const text = this.input.trim();
@@ -255,6 +249,7 @@ export class ChatComponent implements OnDestroy {
       error: () => this.info = 'Nie udało się wysłać wiadomości.',
     });
   }
+
 
   // ======================================================================
   // ===========================  WEBRTC  ==================================

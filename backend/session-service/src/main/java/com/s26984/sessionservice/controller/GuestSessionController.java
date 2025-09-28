@@ -2,6 +2,7 @@ package com.s26984.sessionservice.controller;
 
 import com.s26984.sessionservice.api.dto.CreateGuestSessionRequest;
 import com.s26984.sessionservice.api.dto.GuestSessionResponse;
+import com.s26984.sessionservice.api.dto.VerificationResponse;
 import com.s26984.sessionservice.api.dto.VerifyGuestSessionRequest;
 import com.s26984.sessionservice.service.GuestSessionService;
 import jakarta.validation.Valid;
@@ -24,7 +25,7 @@ public class GuestSessionController {
     }
 
     @PostMapping("/verify")
-    public GuestSessionResponse verify(@Valid @RequestBody VerifyGuestSessionRequest req) {
+    public VerificationResponse verify(@Valid @RequestBody VerifyGuestSessionRequest req) {
         return service.verify(req);
     }
 

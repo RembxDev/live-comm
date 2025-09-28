@@ -23,10 +23,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Value("${chat.stomp.relay.client-login:chat}")  private String clientLogin;
     @Value("${chat.stomp.relay.client-passcode:chat}") private String clientPasscode;
 
-    private final StompAuthChannelInterceptor authInterceptor;
-
-
-
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         if (relayEnabled) {
@@ -54,9 +50,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Override
-    public void configureClientInboundChannel(ChannelRegistration reg) {
-        reg.taskExecutor().corePoolSize(4).maxPoolSize(16).queueCapacity(1000);
-        reg.interceptors(authInterceptor);
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.taskExecutor().corePoolSize(4).maxPoolSize(16).queueCapacity(1000);
     }
 
     @Override

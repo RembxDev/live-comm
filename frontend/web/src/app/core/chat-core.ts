@@ -7,7 +7,7 @@ import SockJS from 'sockjs-client';
 export type MessageType = 'TEXT' | 'FILE' | 'SYSTEM' | 'SIGNALING';
 
 const useSockJS = true;
-const httpWsPath = '/ws-chat'; // proxy.conf.json -> target: chat-service:8082
+const httpWsPath = '/ws-chat';
 
 export interface ChatMessageResponse {
   messageId: string;
@@ -16,7 +16,7 @@ export interface ChatMessageResponse {
   type: MessageType;
   content: string;
   roomId: string;
-  createdAt: string; // ISO
+  createdAt: string;
 }
 
 export interface CreateChatMessageRequest {
@@ -51,13 +51,13 @@ export class ChatWs {
   }
 
   private buildStompUrl(): string {
-    const origin = window.location.origin; // http://localhost:4200
+    const origin = window.location.origin;
     const base = useSockJS ? origin : origin.replace(/^http/, 'ws');
-    return `${base}${httpWsPath}`;        // http://localhost:4200/ws-chat (proxy)
+    return `${base}${httpWsPath}`;
   }
 
   ensureConnected(
-    sessionId: string,
+    jwtToken: string,
     opts: {
       onConnect?: () => void;
       onDisconnect?: () => void;
@@ -76,7 +76,10 @@ export class ChatWs {
       reconnectDelay: opts.reconnectDelay ?? 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      connectHeaders: { 'x-session-id': sessionId, ...(opts.connectHeaders ?? {}) },
+      connectHeaders: {
+        'Authorization': `Bearer ${jwtToken}`,
+        ...(opts.connectHeaders ?? {})
+      },
       onConnect: () => this.zone.run(() => opts.onConnect?.()),
       onStompError: (f) => this.zone.run(() => opts.onError?.(f)),
       onWebSocketClose: () => this.zone.run(() => opts.onDisconnect?.()),
@@ -151,9 +154,7 @@ export class ChatWs {
     });
   }
 
-  /** Typing helper → backend ma @MessageMapping("/rooms/{roomId}/typing") z @Payload boolean */
   sendTyping(roomId: string, typing: boolean): void {
-
     this.publish(`/app/rooms/${roomId}/typing`, JSON.stringify(typing), { 'content-type': 'application/json' });
   }
 

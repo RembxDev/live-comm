@@ -2,6 +2,7 @@ package com.s26984.sessionservice.service;
 
 import com.s26984.sessionservice.api.dto.CreateGuestSessionRequest;
 import com.s26984.sessionservice.api.dto.GuestSessionResponse;
+import com.s26984.sessionservice.api.dto.VerificationResponse;
 import com.s26984.sessionservice.api.dto.VerifyGuestSessionRequest;
 import com.s26984.sessionservice.model.GuestSession;
 import com.s26984.sessionservice.repo.GuestSessionRepository;
@@ -24,6 +25,7 @@ import static org.springframework.http.HttpStatus.*;
 public class GuestSessionService {
 
     private final GuestSessionRepository repo;
+    private final JwtService jwtService;
     private final Clock clock = Clock.systemUTC();
 
     @Value("${session.verification.ttl:PT15M}")
@@ -90,12 +92,13 @@ public class GuestSessionService {
     }
 
     @Transactional
-    public GuestSessionResponse verify(VerifyGuestSessionRequest req) {
+    public VerificationResponse verify(VerifyGuestSessionRequest req) {
         GuestSession gs = repo.findById(req.sessionId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Session not found"));
 
         if (gs.isVerified()) {
-            return new GuestSessionResponse(gs.getSessionId(), gs.getEmail(), true, gs.getCreatedAt(), null, null, null);
+            String token = jwtService.generateToken(gs.getSessionId(), gs.getEmail());
+            return new VerificationResponse(gs.getSessionId(), token);
         }
 
         final Instant now = Instant.now(clock);
@@ -123,7 +126,8 @@ public class GuestSessionService {
         gs.setExpiresAt(null);
         repo.save(gs);
 
-        return new GuestSessionResponse(gs.getSessionId(), gs.getEmail(), true, gs.getCreatedAt(), null, null, null);
+        String token = jwtService.generateToken(gs.getSessionId(), gs.getEmail());
+        return new VerificationResponse(gs.getSessionId(), token);
     }
 
     @Transactional(readOnly = true)

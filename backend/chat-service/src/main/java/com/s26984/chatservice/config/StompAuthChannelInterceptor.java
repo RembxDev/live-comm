@@ -2,6 +2,7 @@ package com.s26984.chatservice.config;
 
 import com.s26984.chatservice.client.SessionClient;
 import com.s26984.chatservice.client.SessionGateway;
+import com.s26984.chatservice.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -11,6 +12,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.security.Principal;
 import java.util.UUID;
@@ -19,31 +21,34 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
-    private final SessionGateway gateway;
+    private final JwtService jwtService;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
-        StompHeaderAccessor acc = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-        if (acc != null && StompCommand.CONNECT.equals(acc.getCommand())) {
-            String sid = acc.getFirstNativeHeader("x-session-id");
-            if (sid == null || sid.isBlank()) {
-                throw new MessagingException("Missing x-session-id");
+        StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+        if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+            String authHeader = accessor.getFirstNativeHeader("Authorization");
+
+            if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+                throw new MessagingException("Missing or invalid Authorization header");
             }
-            final UUID uuid;
+
+            String jwt = authHeader.substring(7);
+            if (!StringUtils.hasText(jwt)) {
+                throw new MessagingException("Missing JWT token");
+            }
+
             try {
-                uuid = UUID.fromString(sid);
+                String sessionId = jwtService.extractSessionId(jwt);
+                if (sessionId != null) {
+                    Principal principal = () -> sessionId;
+                    accessor.setUser(principal);
+                } else {
+                    throw new MessagingException("Invalid JWT token");
+                }
             } catch (Exception e) {
-                throw new MessagingException("Invalid x-session-id");
+                throw new MessagingException("Unauthorized STOMP CONNECT: " + e.getMessage());
             }
-            boolean ok = false;
-            try {
-                ok = gateway.sessionExists(uuid);
-            } catch (Exception ignored) { }
-            if (!ok) {
-                throw new MessagingException("Unauthorized STOMP CONNECT");
-            }
-            Principal p = () -> sid;
-            acc.setUser(p);
         }
         return message;
     }
