@@ -27,6 +27,15 @@ export interface CreateChatMessageRequest {
   roomId: string;
 }
 
+export interface RtcSignal {
+  type: 'offer' | 'answer' | 'candidate' | 'bye';
+  sdp?: string | null;
+  candidate?: RTCIceCandidateInit | null;
+  fromSessionId: string;
+  toSessionId: string;
+  roomId?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ChatWs {
   private http = inject(HttpClient);
@@ -114,13 +123,13 @@ export class ChatWs {
     });
   }
 
-  subscribeRtcInbox(onSignal: (sig: any) => void): void {
+  subscribeRtcInbox(onSignal: (sig: RtcSignal) => void): void {
     if (!this.client?.connected) throw new Error('STOMP not connected');
 
     this.rtcInboxSub?.unsubscribe();
     this.rtcInboxSub = this.client.subscribe(`/user/queue/rtc`, (frame: IMessage) => {
       try {
-        const payload = JSON.parse(frame.body);
+        const payload = JSON.parse(frame.body) as RtcSignal;
         this.zone.run(() => onSignal(payload));
       } catch {
         console.warn('Bad rtc payload', frame.body);

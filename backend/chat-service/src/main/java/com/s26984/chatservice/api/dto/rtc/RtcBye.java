@@ -1,7 +1,17 @@
 package com.s26984.chatservice.api.dto.rtc;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 public record RtcBye(
-        String roomId,
+        String type,
+        String sdp,
+        JsonNode candidate,
         String fromSessionId,
-        String toSessionId
-) {}
+        String toSessionId,
+        String roomId
+) implements RtcSignalPayload {
+
+    public RtcBye {
+        type = type == null || type.isBlank() ? "bye" : type;
+    }
+}
