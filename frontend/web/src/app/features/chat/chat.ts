@@ -2,7 +2,7 @@ import { Component, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { ChatMessageResponse, ChatWs, CreateChatMessageRequest } from '../../core/chat-core';
+import { ChatMessageResponse, ChatWs, CreateChatMessageRequest, RtcSignal } from '../../core/chat-core';
 
 // ===== DTOs sesji =====
 type MessageType = 'TEXT' | 'FILE' | 'SYSTEM' | 'SIGNALING';
@@ -27,6 +27,7 @@ interface VerifyGuestSessionRequest {
 const RTC_OFFER_DEST     = (targetSid: string) => `/app/rtc/${targetSid}/offer`;
 const RTC_ANSWER_DEST    = (targetSid: string) => `/app/rtc/${targetSid}/answer`;
 const RTC_CANDIDATE_DEST = (targetSid: string) => `/app/rtc/${targetSid}/candidate`;
+const RTC_BYE_DEST       = (targetSid: string) => `/app/rtc/${targetSid}/bye`;
 
 @Component({
   selector: 'app-chat',
@@ -141,7 +142,7 @@ export class ChatComponent implements OnDestroy {
 
         this.subscribeRoom(rid);
         this.subscribeTyping(rid);
-        this.subscribeRtcInbox(); // odbiór sygnałów RTC
+        this.subscribeRtcInbox();
 
         this.messages = await this.chatWs.loadHistory(this.apiBase, rid);
         queueMicrotask(() => document.getElementById('messagesEnd')?.scrollIntoView({ behavior: 'smooth' }));
@@ -175,15 +176,15 @@ export class ChatComponent implements OnDestroy {
     }
   }
 
-  /** Odbiór eventów typing z backendu i utrzymywanie listy piszących. */
+
   private subscribeTyping(roomId: string): void {
     try {
       this.chatWs.subscribeTyping(roomId, (ev: { roomId: string; sessionId: string; typing: boolean; ts: string }) => {
-        if (!ev?.sessionId || ev.sessionId === this.sessionId) return; // ignoruj siebie
-        const nick = ev.sessionId; // jeżeli masz mapę sessionId -> nick, tu podstaw nicka
+        if (!ev?.sessionId || ev.sessionId === this.sessionId) return;
+        const nick = ev.sessionId;
 
         if (ev.typing) {
-          // dodaj do listy + odśwież timer wygaszenia
+
           if (!this.typingPeers.includes(nick)) this.typingPeers = [...this.typingPeers, nick];
           clearTimeout(this.typingTimers.get(nick));
           const t = setTimeout(() => {
@@ -192,7 +193,7 @@ export class ChatComponent implements OnDestroy {
           }, 2500);
           this.typingTimers.set(nick, t);
         } else {
-          // usuń od razu
+
           this.typingPeers = this.typingPeers.filter(n => n !== nick);
           clearTimeout(this.typingTimers.get(nick));
           this.typingTimers.delete(nick);
@@ -201,15 +202,15 @@ export class ChatComponent implements OnDestroy {
     } catch {}
   }
 
-  /** Wywoływane przy wpisywaniu – wysyła typing=true i po krótkiej bezczynności typing=false */
+
   onTypingKey(): void {
     const rid = this.roomId.trim();
     if (!rid) return;
 
-    // natychmiast powiadom typing=true
+
     this.chatWs.sendTyping(rid, true);
 
-    // debounce „przestał pisać”
+
     clearTimeout(this.typingSelfDebounce);
     this.typingSelfDebounce = setTimeout(() => {
       this.chatWs.sendTyping(rid, false);
@@ -245,12 +246,10 @@ export class ChatComponent implements OnDestroy {
       if (this.chatWs.connected) {
         this.chatWs.sendMessage(rid, dto);
         this.input = '';
-        // po wysłaniu zgłoś „przestał pisać”
         this.chatWs.sendTyping(rid, false);
         return;
       }
     } catch {}
-    // awaryjnie HTTP
     this.http.post<ChatMessageResponse>(`${this.apiBase}/api/chat/messages`, dto).subscribe({
       next: (saved) => { this.messages = [...this.messages, saved]; this.input = ''; },
       error: () => this.info = 'Nie udało się wysłać wiadomości.',
@@ -353,11 +352,19 @@ export class ChatComponent implements OnDestroy {
     this.pc = new RTCPeerConnection({ iceServers: this.iceServers });
     this.wireOnTrack(this.pc);
 
-    // ICE → wyślij do rozmówcy (po STOMP)
+
     this.pc.onicecandidate = (ev) => {
-      if (ev.candidate && this.calleeSessionId.trim()) {
-        const payload = { type: 'candidate', candidate: ev.candidate };
-        this.chatWs.publish(RTC_CANDIDATE_DEST(this.calleeSessionId.trim()), JSON.stringify(payload), {
+      if (ev.candidate && this.calleeSessionId.trim() && this.sessionId) {
+        const target = this.calleeSessionId.trim();
+        const candidate = typeof ev.candidate.toJSON === 'function' ? ev.candidate.toJSON() : ev.candidate;
+        const payload = {
+          type: 'candidate',
+          candidate,
+          fromSessionId: this.sessionId,
+          toSessionId: target,
+          roomId: this.roomId?.trim() || undefined,
+        };
+        this.chatWs.publish(RTC_CANDIDATE_DEST(target), JSON.stringify(payload), {
           'content-type': 'application/json',
         });
       }
@@ -378,8 +385,16 @@ export class ChatComponent implements OnDestroy {
       const offer = await this.pc!.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
       await this.pc!.setLocalDescription(offer);
 
-      const payload = { type: 'offer', sdp: offer.sdp };
-      this.chatWs.publish(RTC_OFFER_DEST(this.calleeSessionId.trim()), JSON.stringify(payload), {
+      const target = this.calleeSessionId.trim();
+      this.calleeSessionId = target;
+      const payload = {
+        type: 'offer',
+        sdp: offer.sdp,
+        fromSessionId: this.sessionId,
+        toSessionId: target,
+        roomId: this.roomId?.trim() || undefined,
+      };
+      this.chatWs.publish(RTC_OFFER_DEST(target), JSON.stringify(payload), {
         'content-type': 'application/json',
       });
 
@@ -391,6 +406,18 @@ export class ChatComponent implements OnDestroy {
   }
 
   async onEndCall(): Promise<void> {
+    if (this.sessionId && this.calleeSessionId.trim()) {
+      const target = this.calleeSessionId.trim();
+      const payload = {
+        type: 'bye',
+        fromSessionId: this.sessionId,
+        toSessionId: target,
+        roomId: this.roomId?.trim() || undefined,
+      };
+      this.chatWs.publish(RTC_BYE_DEST(target), JSON.stringify(payload), {
+        'content-type': 'application/json',
+      });
+    }
     this.tearDownRtc();
     this.info = 'Połączenie zakończone.';
   }
@@ -411,12 +438,14 @@ export class ChatComponent implements OnDestroy {
     this.pc = undefined;
   }
 
-  /** Odbiór sygnałów z backendu (dopasuj do formatu) */
-  private async onRtcSignal(sig: any) {
+
+  private async onRtcSignal(sig: RtcSignal) {
+    if (!this.sessionId || sig?.toSessionId !== this.sessionId) return;
+
     if (!this.pc) await this.createPeerIfNeeded();
 
     if (sig?.type === 'offer' && sig?.sdp) {
-      // strona „B”
+
       const stream = await this.ensureLocalStream();
       stream.getTracks().forEach(t => this.pc!.addTrack(t, stream));
       this.attachLocal(stream);
@@ -426,29 +455,41 @@ export class ChatComponent implements OnDestroy {
       await this.pc!.setLocalDescription(answer);
 
       if (sig.fromSessionId) {
-        const payload = { type: 'answer', sdp: answer.sdp };
-        this.calleeSessionId = sig.fromSessionId; // pamiętaj peer-a
+        const payload = {
+          type: 'answer',
+          sdp: answer.sdp,
+          fromSessionId: this.sessionId,
+          toSessionId: sig.fromSessionId,
+          roomId: this.roomId?.trim() || undefined,
+        };
+        this.calleeSessionId = sig.fromSessionId;
         this.chatWs.publish(RTC_ANSWER_DEST(sig.fromSessionId), JSON.stringify(payload), {
           'content-type': 'application/json',
         });
       }
     } else if (sig?.type === 'answer' && sig?.sdp) {
+      this.calleeSessionId = sig.fromSessionId ?? this.calleeSessionId;
       await this.pc!.setRemoteDescription({ type: 'answer', sdp: sig.sdp });
     } else if (sig?.type === 'candidate' && sig?.candidate) {
+      this.calleeSessionId = sig.fromSessionId ?? this.calleeSessionId;
       try { await this.pc!.addIceCandidate(sig.candidate); } catch (e) { console.warn('addIceCandidate error', e); }
+    } else if (sig?.type === 'bye') {
+      this.calleeSessionId = '';
+      this.tearDownRtc();
+      this.info = 'Rozmówca zakończył połączenie.';
     } else {
       console.warn('Unknown RTC signal', sig);
     }
   }
 
-  /** Sub do prywatnej kolejki RTC (wywołane w joinRoom) */
+
   private subscribeRtcInbox(): void {
     try {
       this.chatWs.subscribeRtcInbox((sig) => this.onRtcSignal(sig));
     } catch {}
   }
 
-  // ======== PTT – przycisk mikrofonu w kompozytorze ========
+
   async pttDown(): Promise<void> {
     try {
       if (this.pttStream) return;
